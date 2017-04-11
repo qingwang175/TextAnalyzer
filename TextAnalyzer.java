@@ -72,8 +72,8 @@ public class TextAnalyzer extends Configured implements Tool {
             throws IOException, InterruptedException
         {
 			MapWritable map = new MapWritable();
+			/*
 			MapWritable tempMap;
-			Set<Writable> removeSet = new HashSet<Writable>();
 			Iterator<MapWritable> iterator = tuples.iterator();
 			if(iterator.hasNext()) {
 				map = iterator.next();
@@ -92,6 +92,21 @@ public class TextAnalyzer extends Configured implements Tool {
 						map.put(word, val);
 					} else {
 						map.put(word, (IntWritable) tempMap.get(word));
+					}
+				}
+			}
+			*/
+			for(MapWritable tuple : tuples) {
+				Set<Writable> tempSet = new HashSet<Writable>();
+				for(Writable word : tuple.keySet()) {
+   					tempSet.add(word);
+				}
+				for(Writable word : tempSet) {
+					if(map.containsKey(word)) {
+						IntWritable val = new IntWritable(((IntWritable) map.get(word)).get() + ((IntWritable) tuple.get(word)).get());
+						map.put(word, val);
+					} else {
+						map.put(word, (IntWritable) tuple.get(word));
 					}
 				}
 			}
