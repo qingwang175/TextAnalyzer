@@ -55,9 +55,9 @@ public class TextAnalyzer extends Configured implements Tool {
 				}
 				Text word = new Text(rawWord);
 				MapWritable map = new MapWritable();
-				for(String n : masterCount.keySet()) {
+				for(String n : revisedCount.keySet()) {
 					Text text = new Text(n);
-					IntWritable num = new IntWritable(masterCount.get(n));
+					IntWritable num = new IntWritable(revisedCount.get(n));
 					map.put(text, num);
 				}
 				context.write(word, map);
@@ -78,19 +78,22 @@ public class TextAnalyzer extends Configured implements Tool {
 			if(iterator.hasNext()) {
 				map = iterator.next();
 			}
+
 			while (iterator.hasNext()) {
+
 				tempMap = iterator.next();
+				Set<Writable> tempSet = new HashSet<Writable>();
 				for(Writable word : tempMap.keySet()) {
-					if(tempMap.containsKey(word)) {
+   					tempSet.add(word);
+				}
+				for(Writable word : tempSet) {
+					if(map.containsKey(word)) {
 						IntWritable val = new IntWritable(((IntWritable) map.get(word)).get() + ((IntWritable) tempMap.get(word)).get());
 						map.put(word, val);
-						removeSet.remove(word);
+					} else {
+						map.put(word, (IntWritable) tempMap.get(word));
 					}
 				}
-				for(Writable word : removeSet) {
-					tempMap.remove(word);
-				}
-				map.putAll(tempMap);
 			}
 			context.write(key, map);
         }
@@ -127,7 +130,7 @@ public class TextAnalyzer extends Configured implements Tool {
         Configuration conf = this.getConf();
 
         // Create job
-        @SuppressWarnings("deprecation")
+	@SuppressWarnings("deprecation")
         Job job = new Job(conf, "qw2328_gk5483"); // Replace with your EIDs
         job.setJarByClass(TextAnalyzer.class);
 
