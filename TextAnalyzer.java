@@ -34,8 +34,7 @@ public class TextAnalyzer extends Configured implements Tool {
 			
 			while (tokenizer.hasMoreTokens()) {
 				String rawWord = tokenizer.nextToken();
-				rawWord.toLowerCase();
-				rawWord.replaceAll("[^a-zA-Z0-9]", " ");
+				rawWord = rawWord.replaceAll("[^a-zA-Z0-9]", " ").toLowerCase();
 				if(!masterCount.containsKey(rawWord)) {
 					masterCount.put(rawWord, 1);
 				} else {
@@ -128,7 +127,8 @@ public class TextAnalyzer extends Configured implements Tool {
         Configuration conf = this.getConf();
 
         // Create job
-        Job job = new Job(conf, "EID1_EID2"); // Replace with your EIDs
+        @SuppressWarnings("deprecation")
+        Job job = new Job(conf, "qw2328_gk5483"); // Replace with your EIDs
         job.setJarByClass(TextAnalyzer.class);
 
         // Setup MapReduce job
