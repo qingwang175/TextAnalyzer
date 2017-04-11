@@ -1,9 +1,12 @@
 import org.apache.hadoop.fs.Path;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import java.util.StringTokenizer;
 
@@ -29,12 +32,12 @@ public class TextAnalyzer extends Configured implements Tool {
             throws IOException, InterruptedException
         {
         	String line = value.toString();
+        	line = line.replaceAll("[^a-zA-Z0-9]", " ").toLowerCase();
 			StringTokenizer tokenizer = new StringTokenizer(line);
 			HashMap<String, Integer> masterCount = new HashMap<String, Integer>();
 			
 			while (tokenizer.hasMoreTokens()) {
 				String rawWord = tokenizer.nextToken();
-				rawWord = rawWord.replaceAll("[^a-zA-Z0-9]", " ").toLowerCase();
 				if(!masterCount.containsKey(rawWord)) {
 					masterCount.put(rawWord, 1);
 				} else {
@@ -130,11 +133,23 @@ public class TextAnalyzer extends Configured implements Tool {
 	            //   Write out query words and their count
 	            //Should only have one map per queryTuples
 	            for(MapWritable map : queryTuples) {
+	            	List<String> list = new ArrayList<String>();
+	            	for(Writable queryWord: map.keySet()){
+	            		list.add(queryWord.toString());
+	            	}
+	            	Collections.sort(list);
+	            	for(String word : list) {
+	            		String count = map.get(new Text(word)).toString() + ">";
+	            		Text queryWordText = new Text("<" + word + ",");
+	            		context.write(queryWordText, new Text(count));
+	            	}
+	            	/*
 		            for(Writable queryWord: map.keySet()){
 		                String count = map.get(queryWord).toString() + ">";
 		                Text queryWordText = new Text("<" + queryWord.toString() + ",");
 		                context.write(queryWordText, new Text(count));
 		            }
+		            */
 		            //   Empty line for ending the current context key	
 	            }
 	            context.write(emptyText, emptyText);
