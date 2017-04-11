@@ -126,32 +126,38 @@ public class TextAnalyzer extends Configured implements Tool {
             throws IOException, InterruptedException
         {
             // Implementation of you reducer function
+        	MapWritable map = new MapWritable();
+        	for(MapWritable tuple : queryTuples) {
+				Set<Writable> tempSet = new HashSet<Writable>();
+				for(Writable word : tuple.keySet()) {
+   					tempSet.add(word);
+				}
+				for(Writable word : tempSet) {
+					if(map.containsKey(word)) {
+						IntWritable val = new IntWritable(((IntWritable) map.get(word)).get() + ((IntWritable) tuple.get(word)).get());
+						map.put(word, val);
+					} else {
+						map.put(word, (IntWritable) tuple.get(word));
+					}
+				}
+			}
             // Write out the results; you may change the following example
             // code to fit with your reducer function.
             //   Write out the current context key
 	            context.write(key, emptyText);
 	            //   Write out query words and their count
 	            //Should only have one map per queryTuples
-	            for(MapWritable map : queryTuples) {
-	            	List<String> list = new ArrayList<String>();
-	            	for(Writable queryWord: map.keySet()){
-	            		list.add(queryWord.toString());
-	            	}
-	            	Collections.sort(list);
-	            	for(String word : list) {
-	            		String count = map.get(new Text(word)).toString() + ">";
-	            		Text queryWordText = new Text("<" + word + ",");
-	            		context.write(queryWordText, new Text(count));
-	            	}
-	            	/*
-		            for(Writable queryWord: map.keySet()){
-		                String count = map.get(queryWord).toString() + ">";
-		                Text queryWordText = new Text("<" + queryWord.toString() + ",");
-		                context.write(queryWordText, new Text(count));
-		            }
-		            */
-		            //   Empty line for ending the current context key	
+	            List<String> list = new ArrayList<String>();
+	            for(Writable queryWord: map.keySet()){
+	            	list.add(queryWord.toString());
 	            }
+	            Collections.sort(list);
+	            for(String word : list) {
+	            	String count = map.get(new Text(word)).toString() + ">";
+	            	Text queryWordText = new Text("<" + word + ",");
+	            	context.write(queryWordText, new Text(count));
+	            }
+		        //   Empty line for ending the current context key	
 	            context.write(emptyText, emptyText);
         }
     }
