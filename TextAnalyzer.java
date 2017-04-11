@@ -1,27 +1,35 @@
-package org.myorg;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-import java.util.*;
-
-import javax.xml.soap.Text;
-
 import org.apache.hadoop.fs.Path;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.StringTokenizer;
+
 import org.apache.hadoop.conf.*;
 import org.apache.hadoop.io.*;
-import org.apache.hadoop.mapred.*;
-import org.apache.hadoop.util.*;
- 	
-public class TextAnalyzer {
- 	
-	public static class Map extends MapReduceBase implements Mapper<LongWritable, Text, Text, Writable> {
-		private Text word = new Text();
-		
-		public void map(LongWritable key, Text value, OutputCollector<Text, HashWritable> output, Reporter reporter) throws IOException {
-			String line = value.toString();
+import org.apache.hadoop.mapreduce.*;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+
+// Do not change the signature of this class
+public class TextAnalyzer extends Configured implements Tool {
+
+    // Replace "?" with your own output key / value types
+    // The four template data types are:
+    //     <Input Key Type, Input Value Type, Output Key Type, Output Value Type>
+    public static class TextMapper extends Mapper<LongWritable, Text, Text, MapWritable> {
+        public void map(LongWritable key, Text value, Context context)
+            throws IOException, InterruptedException
+        {
+        	String line = value.toString();
 			StringTokenizer tokenizer = new StringTokenizer(line);
-			HashMap<String, HashMap<String, Integer>> lineOutput = new HashMap<String, HashMap<String, Integer>>();
 			HashMap<String, Integer> masterCount = new HashMap<String, Integer>();
 			
 			while (tokenizer.hasMoreTokens()) {
@@ -46,85 +54,117 @@ public class TextAnalyzer {
 					int current = revisedCount.get(rawWord);
 					revisedCount.put(rawWord, current-1);
 				}
-				word.set(rawWord);
-				output.collect(word, new HashWritable(revisedCount));
+				Text word = new Text(rawWord);
+				MapWritable map = new MapWritable();
+				for(String n : masterCount.keySet()) {
+					Text text = new Text(n);
+					IntWritable num = new IntWritable(masterCount.get(n));
+					map.put(text, num);
+				}
+				context.write(word, map);
 			}
-	}
-	
-	public static class HashWritable implements Writable {
-		public HashMap<String, Integer> hash;
-		
-		public HashWritable(HashMap<String, Integer> hash) {
-			this.hash = hash;
-		}
-		
-		@Override
-		public void readFields(DataInput arg0) throws IOException {
-			//How to use this correctly?
-			for(String word : hash.keySet()) {
-				//String writable?
-				IntWritable intWrite = new IntWritable(hash.get(word));
-				intWrite.readFields(arg0);
-			}
-		}
+        }
+    }
 
-		@Override
-		public void write(DataOutput arg0) throws IOException {
-			// Is this even necessary?
-			for(String word : hash.keySet()) {
-				//word.write(arg0);
-				IntWritable intWrite = new IntWritable(hash.get(word));
-				intWrite.write(arg0);
+    // Replace "?" with your own key / value types
+    // NOTE: combiner's output key / value types have to be the same as those of mapper
+    public static class TextCombiner extends Reducer<Text, MapWritable, Text, MapWritable> {
+        public void reduce(Text key, Iterable<MapWritable> tuples, Context context)
+            throws IOException, InterruptedException
+        {
+			MapWritable map = new MapWritable();
+			MapWritable tempMap;
+			Set<Writable> removeSet = new HashSet<Writable>();
+			Iterator<MapWritable> iterator = tuples.iterator();
+			if(iterator.hasNext()) {
+				map = iterator.next();
 			}
-		}
-		
-		public HashMap<String, Integer> get() {
-			return hash;
-		}
-	}
-
-
-	public static class Reduce extends MapReduceBase implements Reducer<Text, Writable, Text, Writable> {
-		public void reduce(Text key, Iterator<HashWritable> values, OutputCollector<Text, HashWritable> output, Reporter reporter) throws IOException {
-			HashMap<String, Integer> masterHash;
-			HashMap<String, Integer> compareHash;
-			if(values.hasNext()) {
-				masterHash = values.next().get();
-			}
-			while (values.hasNext()) {
-				compareHash = values.next().get();
-				for(String word : masterHash.keySet()) {
-					if(compareHash.containsKey(word)) {
-						int val = masterHash.get(word) + compareHash.get(word);
-						masterHash.put(word, val);
-						compareHash.remove(word);
+			while (iterator.hasNext()) {
+				tempMap = iterator.next();
+				for(Writable word : tempMap.keySet()) {
+					if(tempMap.containsKey(word)) {
+						IntWritable val = new IntWritable(((IntWritable) map.get(word)).get() + ((IntWritable) tempMap.get(word)).get());
+						map.put(word, val);
+						removeSet.remove(word);
 					}
 				}
-				masterHash.putAll(compareHash);
+				for(Writable word : removeSet) {
+					tempMap.remove(word);
+				}
+				map.putAll(tempMap);
 			}
-			output.collect(key, new HashWritable(masterHash));
-		}
-	}
+			context.write(key, map);
+        }
+    }
 
-	public static void main(String[] args) throws Exception {
-		JobConf conf = new JobConf(TextAnalyzer.class);
-		conf.setJobName("textanalyzer");
+    // Replace "?" with your own input key / value types, i.e., the output
+    // key / value types of your mapper function
+    public static class TextReducer extends Reducer<Text, MapWritable, Text, Text> {
+        private final static Text emptyText = new Text("");
 
-		conf.setOutputKeyClass(Text.class);
-		conf.setOutputValueClass(HashWritable.class);
+        public void reduce(Text key, Iterable<MapWritable> queryTuples, Context context)
+            throws IOException, InterruptedException
+        {
+            // Implementation of you reducer function
+            // Write out the results; you may change the following example
+            // code to fit with your reducer function.
+            //   Write out the current context key
+	            context.write(key, emptyText);
+	            //   Write out query words and their count
+	            //Should only have one map per queryTuples
+	            for(MapWritable map : queryTuples) {
+		            for(Writable queryWord: map.keySet()){
+		                String count = map.get(queryWord).toString() + ">";
+		                Text queryWordText = new Text("<" + queryWord.toString() + ",");
+		                context.write(queryWordText, new Text(count));
+		            }
+		            //   Empty line for ending the current context key	
+	            }
+	            context.write(emptyText, emptyText);
+        }
+    }
 
-		conf.setMapperClass(Map.class);
-		conf.setCombinerClass(Reduce.class);
-		conf.setReducerClass(Reduce.class);
+    public int run(String[] args) throws Exception {
+        Configuration conf = this.getConf();
 
-		conf.setInputFormat(TextInputFormat.class);
-		conf.setOutputFormat(TextOutputFormat.class);
+        // Create job
+        Job job = new Job(conf, "EID1_EID2"); // Replace with your EIDs
+        job.setJarByClass(TextAnalyzer.class);
 
-		FileInputFormat.setInputPaths(conf, new Path(args[0]));
-		FileOutputFormat.setOutputPath(conf, new Path(args[1]));
+        // Setup MapReduce job
+        job.setMapperClass(TextMapper.class);
+        //   Uncomment the following line if you want to use Combiner class
+        job.setCombinerClass(TextCombiner.class);
+        job.setReducerClass(TextReducer.class);
 
-		JobClient.runJob(conf);
-	}
-	
-	}
+        // Specify key / value types (Don't change them for the purpose of this assignment)
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(Text.class);
+        //   If your mapper and combiner's  output types are different from Text.class,
+        //   then uncomment the following lines to specify the data types.
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(MapWritable.class);
+
+        // Input
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        job.setInputFormatClass(TextInputFormat.class);
+
+        // Output
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        job.setOutputFormatClass(TextOutputFormat.class);
+
+        // Execute job and return status
+        return job.waitForCompletion(true) ? 0 : 1;
+    }
+
+    // Do not modify the main method
+    public static void main(String[] args) throws Exception {
+        int res = ToolRunner.run(new Configuration(), new TextAnalyzer(), args);
+        System.exit(res);
+    }
+
+    // You may define sub-classes here. Example:
+    // public static class MyClass {
+    //
+    // }
 }
